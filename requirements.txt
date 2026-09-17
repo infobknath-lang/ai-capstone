@@ -1,0 +1,12 @@
+langchain
+langchain-community
+chromadb
+sentence-transformers
+huggingface_hub
+python-dotenv
+requests
+scikit-learn
+prometheus_client
+fastapi
+uvicorn
+pytest

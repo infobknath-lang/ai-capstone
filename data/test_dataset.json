@@ -1,0 +1,4 @@
+[
+  {"id": "T-101", "content": "How do I reset my account password?", "expected_intent": "auth_reset", "group": "Enterprise"},
+  {"id": "T-102", "content": "Where can I find compliance certificates?", "expected_intent": "legal_docs", "group": "Small Business"}
+]
