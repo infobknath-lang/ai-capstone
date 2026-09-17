@@ -27,11 +27,10 @@ jobs:
 
     - name: Install declared library dependencies
       run: |
-        # Fixed dependency string parsing issues matching clean runtime layouts
         python -m pip install langchain-text-splitters
         python -m pip install -r requirements.txt
 
-    - name: Execute automated project tests split
+    - name: Run Automated Unit Tests
       run: |
-        # Verifies internal codebase integrity structures on every push commit
-        python -m pytest tests/ -v || echo "Infrastructure validation checks complete."
+        # This tells the GitHub Actions runner to execute your tests directory
+        python -m pytest tests/ -v
