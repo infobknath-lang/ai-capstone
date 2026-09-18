@@ -5,77 +5,119 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Import our custom dependencies from our other files
-from src.logging_store import log_decision
+# Import our complete evidence-grounded blueprint architecture stack modules
+from src.ingest import normalize_ticket
+from src.classify import classify_ticket
 from src.retrieve import query_vector_store
+from src.route import route_ticket
+from src.generate import generate_grounded_response
+from src.guardrails import inspect_generated_text
+from src.logging_store import log_decision
 
 load_dotenv()
 
 app = FastAPI(
-    title="Forward Deployed AI Engineering Support Pipeline API",
-    version="1.0.0"
+    title="CloudServe Solutions Support Automation Platform API",
+    version="2.0.0"
 )
 
-# Define what fields incoming requests must provide
 class TicketRequest(BaseModel):
     ticket_id: str
     content: str
+    subject: str = "No Subject"
     channel: str = "web"
+    group: str = "Standard"
+
+@app.get("/")
+def read_root():
+    return {"status": "online", "system": "CloudServe Core RAG Router Active"}
 
 @app.post("/process_ticket")
-def process_ticket(ticket: TicketRequest):
+def process_ticket(request_payload: TicketRequest):
     try:
-        # Step 1: Run knowledge base semantic lookup via Chroma DB
-        try:
-            docs = query_vector_store(ticket.content, k=2)
-            sources = [{"doc_id": d.metadata.get("doc_id"), "title": d.metadata.get("title"), "score": 1.0} for d in docs] if docs else []
-        except Exception:
-            sources = [{"doc_id": "FALLBACK-01", "title": "System Static Base", "score": 0.50}]
+        # 1. Step 1: Multi-Channel Ingestion & Normalization (FR-01 / B-02)
+        raw_dict = {
+            "id": request_payload.ticket_id,
+            "channel": request_payload.channel,
+            "subject": request_payload.subject,
+            "body": request_payload.content,
+            "group": request_payload.group
+        }
+        ticket = normalize_ticket(raw_dict)
         
-        # Step 2: Extract orchestration variables & simulate intent routing thresholds
-        confidence = 0.85
-        threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.80"))
+        # 2. Step 2: Intent Classification & Urgency Triaging Engine (FR-02 / B-06)
+        classification = classify_ticket(ticket)
         
-        if confidence >= threshold:
-            action = "auto_respond"
-            reason = "Confidence score exceeds the production system threshold requirements."
-            prediction = "auth_reset_resolved"
+        # 3. Step 3: Dense Semantic Vector Lookups (FR-03 / B-04)
+        # Pull top matches from our 500-character index
+        retrieved_docs = query_vector_store(ticket["clean_body"], k=3)
+        
+        # 4. Step 4: Calibrated Deterministic Routing Gate (FR-04 / FR-08 / B-07)
+        routing_decision = route_ticket(ticket, classification, retrieved_docs)
+        
+        # Format sources extracted to support tracking fields
+        sources_used = [
+            {"doc_id": d.metadata.get("doc_id"), "title": d.metadata.get("title")}
+            for d in retrieved_docs
+        ]
+        
+        # Intercept immediately if routing rules dictate escalation (FR-08 Interception Gate)
+        if not routing_decision["should_generate"]:
+            action_taken = routing_decision["action_taken"]
+            prediction = classification.get("intent", "general_inquiry")
+            reason = classification.get("routing_reason", "Escalated to human support lines.")
+            output_response = "This ticket has been securely routed to a Tier 2 engineer for manual review."
+            guardrail_status = "bypass"
+            escalation_pkg = routing_decision["escalation_package"]
         else:
-            action = "escalate"
-            reason = "Confidence metrics fall short of secure auto-resolution parameters."
-            prediction = "human_review_required"
+            # 5. Step 5: Grounded Response Drafting with Inline Citations (FR-05 / B-08)
+            generated_draft = generate_grounded_response(ticket, retrieved_docs)
             
-        # Step 3: Package transaction records matching standard platform compliance matrices
-        decision_id = str(uuid.uuid4())
-        timestamp = datetime.now(timezone.utc).isoformat()
-        
+            # 6. Step 6: Active Pre-Release Output Guardrail Scanning (FR-06 / B-09)
+            guardrail_check = inspect_generated_text(generated_draft)
+            guardrail_status = guardrail_check["status"]
+            
+            if guardrail_status == "block":
+                action_taken = "escalate_guardrail_blocked"
+                prediction = classification.get("intent", "general_inquiry")
+                reason = f"Guardrail blocked release: {guardrail_check['reason']}"
+                output_response = "This ticket has been routed to human agents due to a safety control exception."
+                routing_decision["action_taken"] = action_taken
+                escalation_pkg = {"block_reason": reason}
+            else:
+                action_taken = "auto_respond"
+                prediction = classification.get("intent", "general_inquiry")
+                reason = "Confidence score and safety layers verified successfully."
+                output_response = generated_draft
+                escalation_pkg = None
+
+        # 7. Step 7: Persistent 16-Field Decision Log Auditing Ledger (FR-07 / B-10)
         decision_payload = {
-            "decision_id": decision_id,
-            "created_at": timestamp,
-            "ticket_id": ticket.ticket_id,
+            "decision_id": str(uuid.uuid4()),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "ticket_id": ticket["ticket_id"],
             "stage": "api_live_route",
             "prediction": prediction,
-            "confidence": confidence,
-            "threshold": threshold,
-            "action_taken": action,
+            "confidence": classification.get("confidence", 0.0),
+            "threshold": float(os.getenv("CONFIDENCE_THRESHOLD", "0.80")),
+            "action_taken": action_taken,
             "reason": reason,
-            "sources_used": str(sources),
-            "guardrails_results": str({"pii": "pass", "grounding": "pass"}),
-            "prompt_version": "PR-01 v1.0",
-            "requirement_ids": "FR-01"
+            "sources_used": sources_used,
+            "guardrails_results": {"status": guardrail_status},
+            "prompt_version": "PR-02 v1.2 / PR-03 v1.3",
+            "requirement_ids": ["FR-01", "FR-02", "FR-03", "FR-04", "FR-05", "FR-06", "FR-07", "FR-08", "FR-09"]
         }
-        
-        # Write to SQLite log ledger ledger
         log_decision(decision_payload)
         
         return {
-            "ticket_id": ticket.ticket_id,
-            "action_taken": action,
+            "ticket_id": ticket["ticket_id"],
+            "action_taken": action_taken,
             "prediction": prediction,
-            "confidence": confidence,
-            "reason": reason
+            "confidence": decision_payload["confidence"],
+            "reason": reason,
+            "response": output_response,
+            "escalation_package": escalation_pkg
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

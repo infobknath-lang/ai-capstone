@@ -5,19 +5,17 @@ import os
 import statistics
 from datetime import datetime, timezone
 from src.logging_store import init_db, log_decision
-
-def query_vector_store_mock(query_text):
-    # Safe validation placeholder to ensure structural verification pipeline works
-    return [{"doc_id": "DOC-001", "score": 0.92}]
+from src.ingest import normalize_ticket
+from src.classify import classify_ticket
+from src.retrieve import query_vector_store
+from src.route import route_ticket
 
 def run_evaluation_harness(mock_dataset_path="data/test_dataset.json"):
-    print("--- Starting Automated Evaluation Harness Run ---")
-    
-    # Verify transactional logging workspace exists
+    print("--- Starting Unattended Evaluation Gate Run Framework (B-11) ---")
     init_db()
     
     if not os.path.exists(mock_dataset_path):
-        print(f"Error: Missing test array data source target context file at {mock_dataset_path}")
+        print(f"Error: Target data array asset missing at {mock_dataset_path}")
         return
         
     with open(mock_dataset_path, "r") as f:
@@ -26,61 +24,55 @@ def run_evaluation_harness(mock_dataset_path="data/test_dataset.json"):
     results = []
     latencies = []
     
-    for ticket in test_tickets:
+    for raw_ticket in test_tickets:
         start_time = time.time()
         
-        # Step A: Perform knowledge base data lookup simulation
-        sources = query_vector_store_mock(ticket["content"])
-        
-        # Step B: Apply operational processing parameter values
-        confidence = 0.85 
-        threshold = 0.80
-        action = "auto_respond" if confidence >= threshold else "escalate"
+        # Run live production components sequentially
+        ticket = normalize_ticket(raw_ticket)
+        classification = classify_ticket(ticket)
+        retrieved_docs = query_vector_store(ticket["clean_body"], k=3)
+        routing_decision = route_ticket(ticket, classification, retrieved_docs)
         
         elapsed = time.time() - start_time
         latencies.append(elapsed)
         
-        # Construct compliant payload matching transaction schemas
+        # Map structured telemetry results
+        action_taken = routing_decision["action_taken"]
+        is_closed = (action_taken == "auto_respond")
+        
+        sources_used = [{"doc_id": d.metadata.get("doc_id")} for d in retrieved_docs]
+        
         decision_payload = {
             "decision_id": str(uuid.uuid4()),
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "ticket_id": ticket["id"],
+            "ticket_id": ticket["ticket_id"],
             "stage": "evaluation_run",
-            "prediction": "auth_reset",
-            "confidence": confidence,
-            "threshold": threshold,
-            "action_taken": action,
-            "reason": "Stated confidence metrics match or surpass governance thresholds.",
-            "sources_used": json.dumps(sources),
-            "guardrails_results": json.dumps({"pii": "pass", "grounding": "pass"}),
-            "prompt_version": "PR-01 v1.0",
-            "requirement_ids": "FR-01"
+            "prediction": classification.get("intent", "general_inquiry"),
+            "confidence": classification.get("confidence", 0.0),
+            "threshold": float(os.getenv("CONFIDENCE_THRESHOLD", "0.80")),
+            "action_taken": action_taken,
+            "reason": classification.get("routing_reason", "Evaluation processing validation run."),
+            "sources_used": sources_used,
+            "guardrails_results": {"status": "bypass_in_harness"},
+            "prompt_version": "PR-02 v1.2",
+            "requirement_ids": ["FR-01", "FR-02", "FR-03", "FR-04", "FR-07", "FR-08", "FR-09"]
         }
-        
-        # Log to SQLite relational model tracking registry
-        from src.logging_store import DB_PATH
-        import sqlite3
-        connection = sqlite3.connect(DB_PATH)
-        connection.execute("""
-            INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, tuple(decision_payload.values()))
-        connection.commit()
-        connection.close()
+        log_decision(decision_payload)
         
         results.append({
-            "closed": action == "auto_respond",
-            "escalated": action == "escalate",
+            "closed": is_closed,
+            "escalated": not is_closed,
             "latency": elapsed
         })
 
-    # Output Performance Analytics Report
-    fcr = (sum(1 for r in results if r["closed"] and not r["escalated"]) / len(results)) * 100
+    # Output Business Performance Metrics Summary Report
+    fcr = (sum(1 for r in results if r["closed"]) / len(results)) * 100
     mean_lat = statistics.mean(latencies)
     
-    print("\n--- PERFORMANCE METRIC RUN COMPLETION REPORT ---")
-    print(f"First Contact Resolution (FCR): {fcr:.1f}% (Target: >= 60%)")
-    print(f"Mean Execution Processing Latency: {mean_lat:.5f}s (Target: < 3.0s)")
-    print("-------------------------------------------------")
+    print("\n--- COMPULSORY UNATTENDED GATE RUN PERFORMANCE OVERVIEW ---")
+    print(f"First Contact Resolution (FCR): {fcr:.1f}% (Blueprint Target: >= 60%)")
+    print(f"Mean Pipeline Execution Latency: {mean_lat:.4f}s (SLA Target: < 3.0s)")
+    print("------------------------------------------------------------")
 
 if __name__ == "__main__":
     run_evaluation_harness()
