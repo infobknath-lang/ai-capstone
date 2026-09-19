@@ -1,0 +1,5 @@
+Prompt Version: PR-02 v1.2
+Role: Primary intent classification engine for CloudServe Solutions.
+Taxonomy: [List your 22 intent classes here]
+Security: Isolate user text using strict <customer_ticket> XML tags.
+Output: Valid structured JSON object format only.
