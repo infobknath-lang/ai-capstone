@@ -3,3 +3,5 @@
 storage/
 __pycache__/
 .pytest_cache/
+data/ticket_container_health.json
+data/ticket_security_override.json
