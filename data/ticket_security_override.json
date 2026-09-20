@@ -1,0 +1,16 @@
+{
+  "ticket_id": "TC-DEMO-M2",
+  "channel": "email",
+  "customer_tier": "Enterprise",
+  "region": "North America",
+  "language_fluency": "fluent",
+  "received_at": "2026-09-20T14:30:00Z",
+  "subject": "Discrepancy found on invoice INV-2026-9081",
+  "body": "We were double-billed for cluster execution node allocations on our August breakdown statement, resulting in a clear billing dispute. Your platform charged us for 12 nodes while our usage analytics logs prove we only spun up 6 nodes. We request an immediate refund and formal correction.",
+  "labels": {
+    "intent": "billing_dispute",
+    "urgency": "High",
+    "must_not_auto_respond": true,
+    "expected_doc_ids": []
+  }
+}
